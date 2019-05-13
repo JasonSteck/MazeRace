@@ -7,20 +7,24 @@ const ctx = canvas.getContext("2d");
 
 function Board({ rows, cols, start=0 }) {
   if (rows<2 || cols<2) throw new Error(`Rows and cols must be 2 or greater (rows: ${rows}, cols:${cols})`);
-  const aim = [0, -cols, 1, cols, -1]; // stay, up, right, down, left
+  const tCell = [0, -cols, 1, cols, -1]; // stay, up, right, down, left
+  const tWall = [0, 1, 2, 2*cols + 1, 0];
   const { ShuffledHalls } = Board;
   const totalCells = rows * cols;
-  const q = [start];
 
-  const visited = new Array(totalCells);
-  const toExplore = new Array(totalCells); // halls to explore
-  const finalHalls = new Array(totalCells * 2); // [ left wall of 0, top wall of 0, left wall of 1, top wall of 1... ]
+  let q = undefined;
+  let qi = undefined; // queue index
+  let fhi = undefined; // finalHalls index
+  let visited = undefined; // visited cells
+  let toExplore = undefined; // halls to explore
+  let finalHalls = undefined; // [ left wall of 4, top wall of 3, left wall of 1, ... ]
 
   const fourHalls = () => ShuffledHalls[Math.floor(Math.random() * 24)];
   const threeHalls = (exclude) => ShuffledHalls[6 * (exclude - 1) + Math.floor(Math.random() * 6)] & 0b000111111111;
   const twoHalls = (a, b) => Math.floor(Math.random() * 2) ? (a<<3)+b : (b<<3)+a;
 
-  +function setupHallChoices() {
+  function setupHallChoices() {
+    toExplore = new Array(totalCells);
     const lastRow = totalCells-cols;
     const lastCol = cols-1;
 
@@ -46,14 +50,47 @@ function Board({ rows, cols, start=0 }) {
         i--;
       }
     }
-  }();
+  };
 
-  +function generateMaze() {
+  function generateMaze() {
+    let x = undefined; // cursor
+    let y = undefined; // next
+    let dir = undefined;
+    q = [start];
+    qi = 0;
+    fhi = -1;
 
-  }();
+    visited = new Array(totalCells);
+    finalHalls = new Array(totalCells * 2); // max size
+    setupHallChoices();
+
+    visited[start] = true;
+    while(qi >= 0) {
+      // pop direction, remove cell if done
+      x = q[qi]; // last in q
+      dir = toExplore[x] & 7;
+      toExplore[x] >>= 3;
+      if (toExplore[x] === 0) qi--; // assume x is last in q when removing it
+
+      // if unvisited
+      //   then open hallway, add cell to queue, repeat
+      //   else repeat
+      y = x + tCell[dir];
+      if (visited[y]) continue;
+      qi += 1;
+      q[qi] = y;
+      visited[y] = true;
+      fhi += 1;
+      finalHalls[fhi] = (x << 1) + tWall[dir];
+      console.log(finalHalls[fhi]);
+    }
+    finalHalls.length = fhi + 1;
+    return finalHalls;
+  };
 
   const self = {
-    _move: (from, dir) => from + aim[dir],
+    generateMaze,
+    _move: (from, dir) => from + tCell[dir],
     _fromPos: pos => {
       const x = pos % cols;
       const y = (pos - x)/cols;
@@ -114,7 +151,8 @@ Board.ShuffledHalls = [
   0b100001011010,
 ];
 
-b = Board({ rows: 4, cols: 5 });
+b = Board({ rows: 2, cols: 2 });
+console.log(b.generateMaze());
 b._showAllHalls();
 
 function Game() {
