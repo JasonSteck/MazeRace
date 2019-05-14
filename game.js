@@ -1,14 +1,9 @@
-const canvas = document.getElementById('canvas');
-if (!canvas) throw new Error('No #canvas found');
-
-const ctx = canvas.getContext("2d");
-// ctx.fillStyle = "#FF0000";
-// ctx.fillRect(0, 0, 98.5, 75);
+//
 
 function Board({ rows, cols, start=0 }) {
   if (rows<2 || cols<2) throw new Error(`Rows and cols must be 2 or greater (rows: ${rows}, cols:${cols})`);
-  const tCell = [0, -cols, 1, cols, -1]; // stay, up, right, down, left
-  const tWall = [0, 1, 2, 2*cols + 1, 0];
+  const tCell = [0, -cols, 1, cols, -1]; // (none), up, right, down, left
+  const tWall = [0, 1, 2, 2*cols + 1, 0]; // (none), up, right, down, left
   const { ShuffledHalls } = Board;
   const totalCells = rows * cols;
 
@@ -19,9 +14,9 @@ function Board({ rows, cols, start=0 }) {
   let toExplore = undefined; // halls to explore
   let finalHalls = undefined; // [ left wall of 4, top wall of 3, left wall of 1, ... ]
 
-  const fourHalls = () => ShuffledHalls[Math.floor(Math.random() * 24)];
-  const threeHalls = (exclude) => ShuffledHalls[6 * (exclude - 1) + Math.floor(Math.random() * 6)] & 0b000111111111;
   const twoHalls = (a, b) => Math.floor(Math.random() * 2) ? (a<<3)+b : (b<<3)+a;
+  const threeHalls = (exclude) => ShuffledHalls[6 * (exclude - 1) + Math.floor(Math.random() * 6)] & 0b000111111111;
+  const fourHalls = () => ShuffledHalls[Math.floor(Math.random() * 24)];
 
   function setupHallChoices() {
     toExplore = new Array(totalCells);
@@ -53,10 +48,11 @@ function Board({ rows, cols, start=0 }) {
   };
 
   function generateMaze() {
-    let x = undefined; // cursor
-    let y = undefined; // next
+    let x = undefined; // our cell
+    let y = undefined; // next cell
     let dir = undefined;
-    q = [start];
+    q = new Array(totalCells);
+    q[0] = start;
     qi = 0;
     fhi = -1;
 
@@ -73,7 +69,7 @@ function Board({ rows, cols, start=0 }) {
       if (toExplore[x] === 0) qi--; // assume x is last in q when removing it
 
       // if unvisited
-      //   then open hallway, add cell to queue, repeat
+      //   then add cell to queue, open hall, repeat
       //   else repeat
       y = x + tCell[dir];
       if (visited[y]) continue;
@@ -82,7 +78,6 @@ function Board({ rows, cols, start=0 }) {
       visited[y] = true;
       fhi += 1;
       finalHalls[fhi] = (x << 1) + tWall[dir];
-      console.log(finalHalls[fhi]);
     }
     finalHalls.length = fhi + 1;
     return finalHalls;
@@ -90,6 +85,9 @@ function Board({ rows, cols, start=0 }) {
 
   const self = {
     generateMaze,
+    getMaze() {
+      return finalHalls || generateMaze();
+    },
     _move: (from, dir) => from + tCell[dir],
     _fromPos: pos => {
       const x = pos % cols;
@@ -151,25 +149,38 @@ Board.ShuffledHalls = [
   0b100001011010,
 ];
 
-b = Board({ rows: 2, cols: 2 });
-console.log(b.generateMaze());
-b._showAllHalls();
-
 function Game() {
-  const step = 10;
+  const canvas = document.getElementById('canvas');
+  if (!canvas) throw new Error('No #canvas found');
+  const ctx = canvas.getContext("2d");
+
+  // buffer canvas
+  let mazeLayer = document.createElement('canvas');
+  mazeLayer.width = canvas.width = 1000;
+  mazeLayer.height = canvas.height = 1000;
+  mazeLayerCtx = mazeLayer.getContext('2d');
 
   let board;
   let x = 0;
   let y = 0;
+  const rows = 30;
+  const cols = 30;
+  const lineSize = 5;
+  const colSize = (1000 - lineSize) / Math.max(rows, cols);
+  const cellSize = colSize - lineSize;
+
+  const step = 10;
   const heldKeys = {};
   const releasedKeys = {};
 
   const self = {
-    async start() {
+    start() {
       window.addEventListener('keydown', self.onKeyDown);
       window.addEventListener('keyup', self.onKeyUp);
-      board = generateBoard();
-      setInterval(() => {
+
+      self.generateMazeLayer();
+
+      self.intervalId = setInterval(() => {
         self.update();
         self.render();
       }, 33); // 30 fps
@@ -188,15 +199,47 @@ function Game() {
       }
     },
     render() {
-//       ctx.clearRect(0,0, canvas.width, canvas.height);
+      ctx.clearRect(0,0, canvas.width, canvas.height);
+      ctx.drawImage(mazeLayer, 0, 0);
       ctx.fillRect(x, y, 10, 10);
+    },
+    generateMazeLayer() {
+      board = Board({ rows, cols });
+      board.generateMaze();
+
+      mazeLayerCtx.fillStyle = "#000";
+      for(let i=0; i<1000; i+=colSize) mazeLayerCtx.fillRect(i, 0, lineSize, 1000);
+      for(let i=0; i<1000; i+=colSize) mazeLayerCtx.fillRect(0, i, 1000, lineSize);
+
+      mazeLayerCtx.fillStyle = "#FFF";
+      board.getMaze().forEach(w => {
+        const side = w & 1;
+        const cell = w >> 1;
+        const col = cell % cols;
+        const row = (cell - col) / cols;
+        if (side) {
+          mazeLayerCtx.fillRect(
+            col*colSize + lineSize,
+            row*colSize-1,
+            cellSize,
+            lineSize+2
+          );
+        } else {
+          mazeLayerCtx.fillRect(
+            col*colSize-1,
+            row*colSize + lineSize,
+            lineSize+2,
+            cellSize
+          );
+        }
+      });
     },
   };
 
   return self;
 };
 
-// Game().start();
+Game().start();
 
 
 // Checkerboard
