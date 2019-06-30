@@ -9,11 +9,11 @@ function Board({ rows, cols, start=0 }) {
 
   let q = undefined; // investigate queue
   let qi = undefined; // queue index
-  let hoi = undefined; // hallOrder index
+  let hi = undefined; // last hall index
   let walls = undefined; // [true, true, false]
   let visited = undefined; // visited cells
   let toExplore = undefined; // halls to explore
-  let hallOrder = undefined; // [ left wall of 4, top wall of 3, left wall of 1, ... ]
+  let halls = undefined; // [ left wall of 4, top wall of 3, left wall of 1, ... ]
 
   const twoHalls = (a, b) => Math.floor(Math.random() * 2) ? (a<<3)+b : (b<<3)+a;
   const threeHalls = (exclude) => ShuffledHalls[6 * (exclude - 1) + Math.floor(Math.random() * 6)] & 0b000111111111;
@@ -55,11 +55,13 @@ function Board({ rows, cols, start=0 }) {
     q = new Array(totalCells);
     q[0] = start;
     qi = 0;
-    hoi = -1;
+    hi = -1;
 
     visited = new Array(totalCells);
-    hallOrder = new Array(totalCells * 2); // max size
-    walls = new Array(totalCells * 2).fill(true);
+    halls = new Array(totalCells * 2); // in created order
+    maze = new Array(totalCells * 2).fill(true);
+    walls = undefined; // in number order
+
     setupHallChoices();
 
     visited[start] = true;
@@ -78,22 +80,37 @@ function Board({ rows, cols, start=0 }) {
       qi += 1;
       q[qi] = y;
       visited[y] = true;
-      hoi += 1;
+      hi += 1;
 
       const hall = (x << 1) + tWall[dir];
-      hallOrder[hoi] = hall;
-      walls[hall] = false;
+      halls[hi] = hall;
+      maze[hall] = false;
     }
-    hallOrder.length = hoi + 1;
+    halls.length = hi + 1;
     return self;
   };
 
   const self = {
     generateMaze,
-    get hallOrder() {
-      return hallOrder;
+    get halls() {
+      return halls;
+    },
+    get maze() {
+      return maze;
     },
     get walls() {
+      if(walls) return walls;
+
+      let wi = 0;
+      walls = new Array(totalCells * 2);
+      maze.forEach((isWall, i) => {
+        if(isWall) {
+          walls[wi] = i;
+          wi += 1;
+        }
+      });
+
+      walls.length = wi;
       return walls;
     },
     _move: (from, dir) => from + tCell[dir],
@@ -210,7 +227,7 @@ function Game() {
         pxHeight: canvasHeight,
         chunkSize: colSize,
       });
-      world.buildMaze(self.createMazeRects(board.walls));
+      world.addWalls(self.createWallRects(board.walls));
 
       // create player
       player = world.addPlayer({ x, y });
@@ -268,7 +285,7 @@ function Game() {
 
       // white out the halls
       mazeLayerCtx.fillStyle = "#FFF";
-      board.hallOrder.forEach(w => {
+      board.halls.forEach(w => {
         const side = w & 1;
         const cell = w >> 1;
         const col = cell % cols;
@@ -290,42 +307,29 @@ function Game() {
         }
       });
     },
-    createMazeRects(walls) {
-      const wallRects = new Array(walls.length);
-      let wi = 0;
-
-      function addRect(rect) {
-        wallRects[wi] = rect;
-        wi += 1;
-      }
-
+    createWallRects(walls) {
       // block out the walls
-      walls.forEach((isWall, w) => {
-        if(isWall) {
-          const side = w & 1;
-          const cell = w >> 1;
-          const col = cell % cols;
-          const row = (cell - col) / cols;
-          if (side) {
-            addRect(Rect({
-              x: col*colSize,
-              y: row*colSize,
-              width: colSize + lineSize,
-              height: lineSize,
-            }));
-          } else {
-            addRect(Rect({
-              x: col*colSize,
-              y: row*colSize,
-              width: lineSize,
-              height: colSize + lineSize,
-            }));
-          }
+      return walls.map(w => {
+        const side = w & 1;
+        const cell = w >> 1;
+        const col = cell % cols;
+        const row = (cell - col) / cols;
+        if (side) {
+          return Rect({
+            x: col*colSize,
+            y: row*colSize,
+            width: colSize + lineSize,
+            height: lineSize,
+          });
+        } else {
+          return Rect({
+            x: col*colSize,
+            y: row*colSize,
+            width: lineSize,
+            height: colSize + lineSize,
+          });
         }
       });
-
-      wallRects.length = wi;
-      return wallRects;
     }
   };
 
@@ -382,7 +386,7 @@ function World({ pxWidth, pxHeight, chunkSize=50 }) {
     get chunks() {
       return chunks;
     },
-    buildMaze(wallRects) {
+    addWalls(wallRects) {
       wallRects.forEach(w => addRect(w));
     },
     addPlayer({ x, y }) {
