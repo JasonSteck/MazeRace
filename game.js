@@ -1,19 +1,20 @@
 //
 
-function Board({ rows, cols, start=0 }) {
+function Maze({ rows, cols, start=0 }) {
   if (rows<2 || cols<2) throw new Error(`Rows and cols must be 2 or greater (rows: ${rows}, cols:${cols})`);
   const tCell = [0, -cols, 1, cols, -1]; // (none), up, right, down, left
   const tWall = [0, 1, 2, 2*cols + 1, 0]; // (none), up, right, down, left
-  const { ShuffledHalls } = Board;
+  const { ShuffledHalls } = Maze;
   const totalCells = rows * cols;
 
   let q = undefined; // investigate queue
   let qi = undefined; // queue index
   let hi = undefined; // last hall index
-  let walls = undefined; // [true, true, false]
+  let all = undefined; // [true, true, false]
+  let halls = undefined; // [ left wall of 4, top wall of 3, left wall of 1, ... ]
+  let walls = undefined; // [0, 1, 3, ...]
   let visited = undefined; // visited cells
   let toExplore = undefined; // halls to explore
-  let halls = undefined; // [ left wall of 4, top wall of 3, left wall of 1, ... ]
 
   const twoHalls = (a, b) => Math.floor(Math.random() * 2) ? (a<<3)+b : (b<<3)+a;
   const threeHalls = (exclude) => ShuffledHalls[6 * (exclude - 1) + Math.floor(Math.random() * 6)] & 0b000111111111;
@@ -48,7 +49,7 @@ function Board({ rows, cols, start=0 }) {
     }
   };
 
-  function generateMaze() {
+  function generate() {
     let x = undefined; // our cell
     let y = undefined; // next cell
     let dir = undefined;
@@ -58,9 +59,9 @@ function Board({ rows, cols, start=0 }) {
     hi = -1;
 
     visited = new Array(totalCells);
-    halls = new Array(totalCells * 2); // in created order
-    maze = new Array(totalCells * 2).fill(true);
-    walls = undefined; // in number order
+    all = new Array(totalCells * 2).fill(true);
+    halls = new Array(totalCells * 2);
+    walls = undefined;
 
     setupHallChoices();
 
@@ -84,26 +85,26 @@ function Board({ rows, cols, start=0 }) {
 
       const hall = (x << 1) + tWall[dir];
       halls[hi] = hall;
-      maze[hall] = false;
+      all[hall] = false;
     }
     halls.length = hi + 1;
     return self;
   };
 
   const self = {
-    generateMaze,
+    generate,
     get halls() {
       return halls;
     },
-    get maze() {
-      return maze;
+    get all() {
+      return all;
     },
     get walls() {
       if(walls) return walls;
 
       let wi = 0;
       walls = new Array(totalCells * 2);
-      maze.forEach((isWall, i) => {
+      all.forEach((isWall, i) => {
         if(isWall) {
           walls[wi] = i;
           wi += 1;
@@ -133,7 +134,7 @@ function Board({ rows, cols, start=0 }) {
   return self;
 }
 // all combos of (3-bit) shuffled directions
-Board.ShuffledHalls = [
+Maze.ShuffledHalls = [
   0b001010011100, // 1, 2, 3, 4
   0b001010100011, // 1, 2, 4, 3
   0b001011010100, // 1, 3, 2, 4
@@ -167,7 +168,7 @@ function Rect(rect) {
 }
 
 function Game() {
-  let board;
+  let maze;
   let world;
   const rows = 30;
   const cols = 30;
@@ -207,8 +208,8 @@ function Game() {
 
   const self = {
     debug: true,
-    get board() {
-      return board;
+    get maze() {
+      return maze;
     },
     get world() {
       return world;
@@ -218,8 +219,8 @@ function Game() {
       window.addEventListener('keyup', self.onKeyUp);
 
       // generate conceptual maze
-      board = Board({ rows, cols });
-      board.generateMaze();
+      maze = Maze({ rows, cols });
+      maze.generate();
 
       // create physics system with maze
       world = World({
@@ -227,7 +228,7 @@ function Game() {
         pxHeight: canvasHeight,
         chunkSize: colSize,
       });
-      world.addWalls(self.createWallRects(board.walls));
+      world.addWalls(self.createWallRects(maze.walls));
 
       // create player
       player = world.addPlayer({ x, y });
@@ -285,7 +286,7 @@ function Game() {
 
       // white out the halls
       mazeLayerCtx.fillStyle = "#FFF";
-      board.halls.forEach(w => {
+      maze.halls.forEach(w => {
         const side = w & 1;
         const cell = w >> 1;
         const col = cell % cols;
