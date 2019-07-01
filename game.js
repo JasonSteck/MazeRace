@@ -166,24 +166,22 @@ Maze.ShuffledHalls = [
   0b100001011010,
 ];
 
-function Rect(rect) {
-  rect.midX = rect.x + rect.width/2;
-  rect.midY = rect.y + rect.height/2;
-  return rect;
-}
-
 function Game() {
   let maze;
   let world;
+  let player;
+  const step = 7;
   const rows = 30;
   const cols = 30;
   const lineSize = 5;
 
   const canvasWidthTarget = 1000;
   const canvasHeightTarget = 1000;
-
   const canvasWidth = canvasWidthTarget - ((canvasWidthTarget - lineSize) % cols);
   const canvasHeight = canvasHeightTarget - ((canvasHeightTarget - lineSize) % rows);
+
+  const colSize = (canvasWidth - lineSize) / Math.max(rows, cols);
+  const cellSize = colSize - lineSize;
 
   // output
   const canvas = document.getElementById('canvas');
@@ -196,20 +194,7 @@ function Game() {
   mazeLayer.height = canvas.height = canvasHeight;
   mazeLayerCtx = mazeLayer.getContext('2d');
 
-  const colSize = (canvasWidth - lineSize) / Math.max(rows, cols);
-  const cellSize = colSize - lineSize;
-
-  let player;
-  let x = (colSize+lineSize)/2;
-  let y = (colSize+lineSize)/2;
-  const pWidth = 10;
-  const pHeight = 10;
-  const halfPW = pWidth/2;
-  const halfPH = pHeight/2;
-
-  const step = 7;
   const heldKeys = {};
-  const releasedKeys = {};
 
   const self = {
     debug: true,
@@ -229,6 +214,7 @@ function Game() {
 
       // create physics system with maze
       world = World({
+        ctx,
         pxWidth: canvasWidth,
         pxHeight: canvasHeight,
         chunkSize: colSize,
@@ -236,7 +222,10 @@ function Game() {
       world.addWalls(self.createWallRects(maze.walls));
 
       // create player
-      player = world.addPlayer({ x, y });
+      player = world.addPlayer({
+        x: (colSize+lineSize)/2 + 5,
+        y: (colSize+lineSize)/2 + 5,
+      });
 
       // create cached visual layer for maze
       self.createMazeDrawing();
@@ -256,27 +245,26 @@ function Game() {
       let xVel = 0;
       let yVel = 0;
 
-      if (heldKeys.ArrowUp) yVel -= step;
-      else if (heldKeys.ArrowDown) yVel += step;
+      if (heldKeys.ArrowUp || heldKeys.w) yVel -= step;
+      else if (heldKeys.ArrowDown || heldKeys.s) yVel += step;
 
-      if (heldKeys.ArrowLeft) xVel -= step;
-      else if (heldKeys.ArrowRight) xVel += step;
+      if (heldKeys.ArrowLeft || heldKeys.a) xVel -= step;
+      else if (heldKeys.ArrowRight || heldKeys.d) xVel += step;
 
-      x += xVel;
-      y += yVel;
+      player.xVel = xVel;
+      player.yVel = yVel;
 
-      world.getNearbyObjects(x,y);
+      world.update();
     },
     render() {
       ctx.clearRect(0,0, canvas.width, canvas.height);
       ctx.drawImage(mazeLayer, 0, 0);
 
-      ctx.fillStyle = "#000";
-      ctx.fillRect(x-halfPW, y-halfPH, pWidth, pHeight);
+      world.draw(ctx);
 
       if(self.debug) {
         ctx.fillStyle = "#F00";
-        const objects = world.getNearbyObjects(x, y);
+        const objects = world.getNearbyObjects(player.x, player.y);
         for(let id in objects) {
           const o = objects[id];
 
@@ -364,7 +352,30 @@ function Game() {
   return self;
 };
 
-function World({ pxWidth, pxHeight, chunkSize=50 }) {
+function Rect(rect) {
+  rect.midX = rect.x + rect.width/2;
+  rect.midY = rect.y + rect.height/2;
+  return rect;
+}
+
+function Player({ x, y, width=10, height=10 }) {
+  const self = {
+    x, y,
+    xVel: 0,
+    yVel: 0,
+    width,
+    height,
+    draw(ctx) {
+      ctx.fillStyle = "#000";
+      ctx.fillRect(self.x, self.y, self.width, self.height);
+    }
+  };
+  return self;
+}
+
+function World({ ctx, pxWidth, pxHeight, chunkSize=50 }) {
+  const entities = [];
+
   // if chunk size is too small, entities might pass through things
   // if chunk size is big then the game will probably slow down
   const colChunks = Math.ceil(pxWidth/chunkSize);
@@ -411,14 +422,26 @@ function World({ pxWidth, pxHeight, chunkSize=50 }) {
   }
 
   return {
-    get chunks() {
-      return chunks;
+    entities,
+    chunks,
+    update() {
+      entities.forEach(e => {
+        e.x += e.xVel;
+        e.y += e.yVel;
+      });
+    },
+    draw() {
+      entities.forEach(e => {
+        e.draw(ctx);
+      });
+    },
+    addPlayer(p) {
+      const player = Player(p);
+      entities.push(player);
+      return player;
     },
     addWalls(wallRects) {
       wallRects.forEach(w => addRect(w));
-    },
-    addPlayer({ x, y }) {
-
     },
     getNearbyObjects,
   };
