@@ -59,9 +59,14 @@ function Maze({ rows, cols, start=0 }) {
     hi = -1;
 
     visited = new Array(totalCells);
-    all = new Array(totalCells * 2).fill(true);
     halls = new Array(totalCells * 2);
     walls = undefined;
+    all = new Array((totalCells + cols) * 2).fill(true);
+
+    // remove dangling walls from bottom wall
+    for(let i=totalCells*2; i< all.length; i += 2) {
+      all[i] = false;
+    }
 
     setupHallChoices();
 
