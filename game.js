@@ -314,28 +314,50 @@ function Game() {
       });
     },
     createWallRects(walls) {
+      // account for shared left/right walls
+      const rects = new Array(walls.length + rows);
+      let ri = 0;
+
+      const rightSide = cols*colSize;
+      const wallSize = colSize + lineSize;
+
+      function addRect(rect) {
+        rects[ri++] = rect;
+      }
+
       // block out the walls
-      return walls.map(w => {
+      walls.forEach(w => {
         const side = w & 1;
         const cell = w >> 1;
         const col = cell % cols;
         const row = (cell - col) / cols;
         if (side) {
-          return Rect({
+          addRect(Rect({
             x: col*colSize,
             y: row*colSize,
-            width: colSize + lineSize,
+            width: wallSize,
             height: lineSize,
-          });
+          }));
         } else {
-          return Rect({
+          addRect(Rect({
             x: col*colSize,
             y: row*colSize,
             width: lineSize,
-            height: colSize + lineSize,
-          });
+            height: wallSize,
+          }));
         }
       });
+
+      for(let r=0; r<rows; r++) {
+        addRect(Rect({
+          x: rightSide,
+          y: r*colSize,
+          width: lineSize,
+          height: wallSize,
+        }));
+      }
+
+      return rects; // should be correct size already
     }
   };
 
